@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
+
+	quic "github.com/quic-go/quic-go"
 )
 
 // Listener (Server)
@@ -51,6 +55,82 @@ func handleSender(conn net.Conn, stream Stream) {
 		ok   bool
 	}, totalChunks)
 
+	if meta.Transport == "QUIC" {
+		// Connect to sender's QUIC server
+		tlsConf := &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"dataram"},
+			ServerName:         "localhost", // Fix for tls: unrecognized name
+		}
+		session, err := quic.DialAddr(context.Background(), meta.QuicAddr, tlsConf, nil)
+		if err != nil {
+			fmt.Println("QUIC dial error:", err)
+			return
+		}
+		defer session.CloseWithError(0, "")
+		requestChunk := func(i int) {
+			defer wg.Done()
+			streamSend, err := session.OpenStreamSync(context.Background())
+			if err != nil {
+				chunkResults <- struct {
+					idx  int
+					data []byte
+					ok   bool
+				}{i, nil, false}
+				return
+			}
+			json.NewEncoder(streamSend).Encode(map[string]int{"request_chunk": i})
+			streamSend.Close()
+			streamRecv, err := session.AcceptStream(context.Background())
+			if err != nil {
+				chunkResults <- struct {
+					idx  int
+					data []byte
+					ok   bool
+				}{i, nil, false}
+				return
+			}
+			var chunk struct {
+				ChunkIndex int    `json:"chunk_index"`
+				Data       []byte `json:"data"`
+			}
+			if err := json.NewDecoder(streamRecv).Decode(&chunk); err != nil {
+				chunkResults <- struct {
+					idx  int
+					data []byte
+					ok   bool
+				}{i, nil, false}
+				return
+			}
+			if err := stream.SeekAbsolute(int64(chunk.ChunkIndex * meta.ChunkSize)); err == nil {
+				stream.Write(chunk.Data)
+			}
+			chunkResults <- struct {
+				idx  int
+				data []byte
+				ok   bool
+			}{chunk.ChunkIndex, chunk.Data, true}
+		}
+		for i := 0; i < totalChunks; i++ {
+			wg.Add(1)
+			go requestChunk(i)
+		}
+		receivedCount := 0
+		for receivedCount < totalChunks {
+			res := <-chunkResults
+			if res.ok {
+				mu.Lock()
+				progress.Received[res.idx] = true
+				mu.Unlock()
+				fmt.Printf("Received chunk %d/%d\n", res.idx+1, totalChunks)
+			}
+			receivedCount++
+		}
+		wg.Wait()
+		fmt.Println("File transfer complete.")
+		return
+	}
+	// Default: TCP
 	requestChunk := func(i int) {
 		defer wg.Done()
 		req := map[string]int{"request_chunk": i}
@@ -91,12 +171,10 @@ func handleSender(conn net.Conn, stream Stream) {
 			ok   bool
 		}{chunk.ChunkIndex, chunk.Data, true}
 	}
-
 	for i := 0; i < totalChunks; i++ {
 		wg.Add(1)
 		go requestChunk(i)
 	}
-
 	receivedCount := 0
 	for receivedCount < totalChunks {
 		res := <-chunkResults
