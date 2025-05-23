@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"net"
 	"testing"
 	"time"
 )
@@ -17,7 +15,7 @@ func TestMemoryStreamTransfer(t *testing.T) {
 		Filename:  "memory.txt",
 		Size:      int64(len(data)),
 		ChunkSize: chunkSize,
-		Transport: "TCP",
+		Transport: TCP_S,
 	}
 	dst := &TestStream{}
 
@@ -26,25 +24,11 @@ func TestMemoryStreamTransfer(t *testing.T) {
 
 	// Start listener (receiver) in a goroutine
 	go func() {
-		ln, err := net.Listen("tcp", addr)
+		err := AcceptAndHandleOnce(addr, dst)
 		if err != nil {
 			done <- err
 			return
 		}
-		defer ln.Close()
-		conn, err := ln.Accept()
-		if err != nil {
-			done <- err
-			return
-		}
-		// Wrap handleSender in a recover to catch panics and errors
-		defer func() {
-			if r := recover(); r != nil {
-				done <- fmt.Errorf("panic: %v", r)
-			}
-		}()
-		handleSender(conn, dst)
-		conn.Close()
 		done <- nil
 	}()
 
@@ -81,31 +65,17 @@ func TestFileTransferTCP(t *testing.T) {
 		Size:      int64(len(data)),
 		ChunkSize: chunkSize,
 		Metadata:  map[string]interface{}{"desc": "tcp test"},
-		Transport: "TCP",
+		Transport: TCP_S,
 	}
 	dst := &TestStream{}
 	addr := "127.0.0.1:9102"
 	done := make(chan error, 1)
 	go func() {
-		ln, err := net.Listen("tcp", addr)
+		err := AcceptAndHandleOnce(addr, dst)
 		if err != nil {
 			done <- err
 			return
 		}
-		defer ln.Close()
-		conn, err := ln.Accept()
-		if err != nil {
-			done <- err
-			return
-		}
-		// Wrap handleSender in a recover to catch panics and errors
-		defer func() {
-			if r := recover(); r != nil {
-				done <- fmt.Errorf("panic: %v", r)
-			}
-		}()
-		handleSender(conn, dst)
-		conn.Close()
 		done <- nil
 	}()
 	time.Sleep(100 * time.Millisecond)
@@ -137,32 +107,18 @@ func TestFileTransferQUIC(t *testing.T) {
 		Size:      int64(len(data)),
 		ChunkSize: chunkSize,
 		Metadata:  map[string]interface{}{"desc": "quic test"},
-		Transport: "QUIC",
+		Transport: QUIC_S,
 		QuicAddr:  "localhost:4243",
 	}
 	dst := &TestStream{}
 	addr := "127.0.0.1:9103"
 	done := make(chan error, 1)
 	go func() {
-		ln, err := net.Listen("tcp", addr)
+		err := AcceptAndHandleOnce(addr, dst)
 		if err != nil {
 			done <- err
 			return
 		}
-		defer ln.Close()
-		conn, err := ln.Accept()
-		if err != nil {
-			done <- err
-			return
-		}
-		// Wrap handleSender in a recover to catch panics and errors
-		defer func() {
-			if r := recover(); r != nil {
-				done <- fmt.Errorf("panic: %v", r)
-			}
-		}()
-		handleSender(conn, dst)
-		conn.Close()
 		done <- nil
 	}()
 	time.Sleep(100 * time.Millisecond)

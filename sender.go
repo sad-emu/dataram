@@ -129,9 +129,9 @@ func runTcpSender(addr string, meta FileMetadata, stream Stream) {
 
 // Sender (Client)
 func runSender(addr string, meta FileMetadata, stream Stream) {
-	if meta.Transport == "QUIC" {
+	if meta.Transport == QUIC_S {
 		runQuicSender(addr, meta, stream)
-	} else if meta.Transport == "TCP" {
+	} else if meta.Transport == TCP_S {
 		runTcpSender(addr, meta, stream)
 	}
 }

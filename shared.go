@@ -1,5 +1,10 @@
 package main
 
+const (
+	TCP_S  = "TCP"
+	QUIC_S = "QUIC"
+)
+
 // FileMetadata holds metadata about the file to transfer
 type FileMetadata struct {
 	Filename  string                 `json:"filename"`
@@ -17,3 +22,14 @@ type Progress struct {
 	Received    map[int]bool
 	Sent        map[int]bool
 }
+
+type ChunkResult struct {
+	Index int
+	Data  []byte
+	Ok    bool
+}
+
+// ChunkResultList represents a variable list of ChunkResult
+// Useful for passing or collecting multiple chunk results
+// e.g. for batch operations or result aggregation
+type ChunkResultList []ChunkResult
