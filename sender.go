@@ -12,17 +12,11 @@ import (
 	quic "github.com/quic-go/quic-go"
 )
 
-func runQuicSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds int) error {
+func runQuicSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds int, tlsConf *tls.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
 	// Start QUIC server for data transfer
-	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{loadSenderCert()},
-		NextProtos:         []string{"dataram"},
-		ServerName:         "localhost",
-	}
 	listener, err := quic.ListenAddr(meta.QuicAddr, tlsConf, nil)
 	if err != nil {
 		fmt.Println("Sender QUIC listen error:", err)
@@ -31,7 +25,7 @@ func runQuicSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds
 	defer listener.Close()
 
 	// Connect to listener via TCP for metadata
-	conn, err := net.Dial("tcp", addr)
+	conn, err := tls.Dial("tcp", addr, tlsConf)
 	if err != nil {
 		fmt.Println("Sender TCP Dial error:", err)
 		return err
@@ -59,18 +53,28 @@ func runQuicSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds
 			break
 		}
 		idx := req["request_chunk"]
-		buf := make([]byte, meta.ChunkSize)
-		stream.SeekAbsolute(int64(idx * meta.ChunkSize))
-		n, _ := stream.Read(buf)
-		chunk := struct {
-			ChunkIndex int    `json:"chunk_index"`
-			Data       []byte `json:"data"`
-		}{ChunkIndex: idx, Data: buf[:n]}
 		streamSend, err := session.OpenStreamSync(ctx)
 		if err != nil {
 			break
 		}
-		json.NewEncoder(streamSend).Encode(chunk)
+		if meta.Availability != nil && !meta.Availability[idx] {
+			// Not available, respond with Ok: false
+			json.NewEncoder(streamSend).Encode(struct {
+				ChunkIndex int    `json:"chunk_index"`
+				Data       []byte `json:"data"`
+				Ok         bool   `json:"ok"`
+			}{ChunkIndex: idx, Data: nil, Ok: false})
+			streamSend.Close()
+			continue
+		}
+		buf := make([]byte, meta.ChunkSize)
+		stream.SeekAbsolute(int64(idx * meta.ChunkSize))
+		n, _ := stream.Read(buf)
+		json.NewEncoder(streamSend).Encode(struct {
+			ChunkIndex int    `json:"chunk_index"`
+			Data       []byte `json:"data"`
+			Ok         bool   `json:"ok"`
+		}{ChunkIndex: idx, Data: buf[:n], Ok: true})
 		streamSend.Close()
 		progress.Sent[idx] = true
 		fmt.Printf("Sent chunk %d/%d\n", idx+1, progress.TotalChunks)
@@ -81,7 +85,6 @@ func runQuicSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds
 		fmt.Println("Sender QUIC session close error:", err)
 		return err
 	}
-	// Close the TCP connection
 	if err := conn.Close(); err != nil {
 		fmt.Println("Sender TCP connection close error:", err)
 		return err
@@ -89,8 +92,8 @@ func runQuicSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds
 	return nil
 }
 
-func runTcpSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds int) error {
-	conn, err := net.DialTimeout("tcp", addr, time.Duration(timeoutSeconds)*time.Second)
+func runTcpSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds int, tlsConf *tls.Config) error {
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: time.Duration(timeoutSeconds) * time.Second}, "tcp", addr, tlsConf)
 	if err != nil {
 		fmt.Println("Sender TCP ONLY Dial error:", err)
 		return err
@@ -118,17 +121,23 @@ func runTcpSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds 
 			return err
 		}
 		idx := req["request_chunk"]
+		if meta.Availability != nil && !meta.Availability[idx] {
+			// Not available, respond with Ok: false
+			enc.Encode(struct {
+				ChunkIndex int    `json:"chunk_index"`
+				Data       []byte `json:"data"`
+				Ok         bool   `json:"ok"`
+			}{ChunkIndex: idx, Data: nil, Ok: false})
+			continue
+		}
 		buf := make([]byte, meta.ChunkSize)
 		stream.SeekAbsolute(int64(idx * meta.ChunkSize))
 		n, _ := stream.Read(buf)
-		chunk := struct {
+		enc.Encode(struct {
 			ChunkIndex int    `json:"chunk_index"`
 			Data       []byte `json:"data"`
-		}{ChunkIndex: idx, Data: buf[:n]}
-		if err := enc.Encode(chunk); err != nil {
-			fmt.Println("Sender TCP Chunk send error:", err)
-			return err
-		}
+			Ok         bool   `json:"ok"`
+		}{ChunkIndex: idx, Data: buf[:n], Ok: true})
 		progress.Sent[idx] = true
 		fmt.Printf("Sent chunk %d/%d\n", idx+1, progress.TotalChunks)
 	}
@@ -141,21 +150,12 @@ func runTcpSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds 
 }
 
 // Sender (Client)
-func runSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds int) error {
+func runSender(addr string, meta FileMetadata, stream Stream, timeoutSeconds int, tlsConf *tls.Config) error {
 	if meta.Transport == QUIC_S {
-		return runQuicSender(addr, meta, stream, timeoutSeconds)
+		return runQuicSender(addr, meta, stream, timeoutSeconds, tlsConf)
 	} else if meta.Transport == TCP_S {
-		return runTcpSender(addr, meta, stream, timeoutSeconds)
+		return runTcpSender(addr, meta, stream, timeoutSeconds, tlsConf)
 	} else {
 		return fmt.Errorf("unsupported transport: %s", meta.Transport)
 	}
-}
-
-// Helper to load the server certificate
-func loadSenderCert() tls.Certificate {
-	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
-	if err != nil {
-		panic("failed to load server TLS cert: " + err.Error())
-	}
-	return cert
 }
