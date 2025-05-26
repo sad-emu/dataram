@@ -48,11 +48,14 @@ func AcceptAndHandleOnce(addr string, stream Stream) error {
 		return err
 	}
 	defer conn.Close()
-	handleSender(conn, stream)
-	return nil
+	err = handleSender(conn, stream)
+	if err != nil {
+		fmt.Println("Error handling sender:", err)
+	}
+	return err
 }
 
-func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResultsChan chan ChunkResult, stream Stream, progress *Progress) {
+func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResultsChan chan ChunkResult, stream Stream, progress *Progress) error {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       []tls.Certificate{loadListenerCert()},
@@ -61,24 +64,24 @@ func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResu
 	}
 	session, err := quic.DialAddr(context.Background(), meta.QuicAddr, tlsConf, nil)
 	if err != nil {
-		fmt.Println("Listener QUIC dial error:", err)
-		return
+		fmt.Println("Listener QUIC dial error: %w", err)
+		return err
 	}
 	defer session.CloseWithError(0, "")
 	totalChunks := progress.TotalChunks
-	requestChunk := func(i int) {
+	requestChunk := func(i int) error {
 		defer wg.Done()
 		streamSend, err := session.OpenStreamSync(context.Background())
 		if err != nil {
 			chunkResultsChan <- ChunkResult{Index: i, Data: nil, Ok: false}
-			return
+			return err
 		}
 		json.NewEncoder(streamSend).Encode(map[string]int{"request_chunk": i})
 		streamSend.Close()
 		streamRecv, err := session.AcceptStream(context.Background())
 		if err != nil {
 			chunkResultsChan <- ChunkResult{Index: i, Data: nil, Ok: false}
-			return
+			return err
 		}
 		var chunk struct {
 			ChunkIndex int    `json:"chunk_index"`
@@ -86,12 +89,13 @@ func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResu
 		}
 		if err := json.NewDecoder(streamRecv).Decode(&chunk); err != nil {
 			chunkResultsChan <- ChunkResult{Index: i, Data: nil, Ok: false}
-			return
+			return err
 		}
 		if err := stream.SeekAbsolute(int64(chunk.ChunkIndex * meta.ChunkSize)); err == nil {
 			stream.Write(chunk.Data)
 		}
 		chunkResultsChan <- ChunkResult{Index: chunk.ChunkIndex, Data: chunk.Data, Ok: true}
+		return nil
 	}
 	for i := 0; i < totalChunks; i++ {
 		wg.Add(1)
@@ -109,9 +113,10 @@ func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResu
 	}
 	wg.Wait()
 	fmt.Println("Listener QUIC File transfer complete.")
+	return nil
 }
 
-func handleTcp(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResultsChan chan ChunkResult, stream Stream, progress *Progress, dec *json.Decoder, conn net.Conn) {
+func handleTcp(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResultsChan chan ChunkResult, stream Stream, progress *Progress, dec *json.Decoder, conn net.Conn) error {
 	totalChunks := progress.TotalChunks
 	requestChunk := func(i int) {
 		defer wg.Done()
@@ -155,6 +160,7 @@ func handleTcp(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResul
 	}
 	wg.Wait()
 	fmt.Println("File transfer complete.")
+	return nil
 }
 
 // Helper to load the server certificate
@@ -166,13 +172,13 @@ func loadListenerCert() tls.Certificate {
 	return cert
 }
 
-func handleSender(conn net.Conn, stream Stream) {
+func handleSender(conn net.Conn, stream Stream) error {
 	defer conn.Close()
 	dec := json.NewDecoder(conn)
 	var meta FileMetadata
 	if err := dec.Decode(&meta); err != nil {
-		fmt.Println("Metadata decode error:", err)
-		return
+		fmt.Println("Metadata decode error: %w", err)
+		return err
 	}
 	fmt.Printf("Receiving file: %s (%d bytes)\n", meta.Filename, meta.Size)
 	progress := &Progress{TotalChunks: int((meta.Size + int64(meta.ChunkSize) - 1) / int64(meta.ChunkSize)), Received: make(map[int]bool)}
@@ -181,8 +187,9 @@ func handleSender(conn net.Conn, stream Stream) {
 	chunkResultsChan := make(chan ChunkResult, progress.TotalChunks)
 
 	if meta.Transport == QUIC_S {
-		handleQuic(meta, &mu, &wg, chunkResultsChan, stream, progress)
+		return handleQuic(meta, &mu, &wg, chunkResultsChan, stream, progress)
 	} else if meta.Transport == TCP_S {
-		handleTcp(meta, &mu, &wg, chunkResultsChan, stream, progress, dec, conn)
+		return handleTcp(meta, &mu, &wg, chunkResultsChan, stream, progress, dec, conn)
 	}
+	return nil
 }

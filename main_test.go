@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -26,16 +27,15 @@ func TestMemoryStreamTransfer(t *testing.T) {
 	go func() {
 		err := AcceptAndHandleOnce(addr, dst)
 		if err != nil {
-			done <- err
-			return
+			fmt.Println("ffffffffffffffffffffffffffffffffffListener errorfdfdfdf: \n", err)
 		}
-		done <- nil
+		done <- err // Always send, even if err is nil
 	}()
 
 	time.Sleep(100 * time.Millisecond) // Give listener time to start
 
 	// Sender (client) connects and sends data
-	runSender(addr, meta, src)
+	runSender(addr, meta, src, 3)
 
 	select {
 	case err := <-done:
@@ -80,7 +80,7 @@ func TestFileTransferTCP(t *testing.T) {
 		done <- nil
 	}()
 	time.Sleep(100 * time.Millisecond)
-	runSender(addr, meta, src)
+	runSender(addr, meta, src, 3)
 	select {
 	case err := <-done:
 		if err != nil {
@@ -116,21 +116,28 @@ func TestFileTransferQUIC(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		err := AcceptAndHandleOnce(addr, dst)
-		if err != nil {
-			done <- err
-			return
-		}
-		done <- nil
+		fmt.Println("Listener error:", err)
+		done <- err // Always send, even if err is nil
 	}()
 	time.Sleep(100 * time.Millisecond)
-	runSender(addr, meta, src)
+	runSender(addr, meta, src, 3)
+	// Wait for either done or timeout, but also check for errors after the timeout
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("Listener error: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Test timed out waiting for transfer to complete")
+		// Try to read from done once more in case the goroutine finished just after the timeout
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Listener error (after timeout): %v", err)
+			}
+			t.Fatal("Test timed out waiting for transfer to complete (but goroutine finished after timeout)")
+		default:
+			t.Fatal("Test timed out waiting for transfer to complete")
+		}
 	}
 	dst.SeekAbsolute(0)
 	buf := make([]byte, len(data))
