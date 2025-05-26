@@ -19,7 +19,7 @@ func TestMemoryStreamTransfer(t *testing.T) {
 	}
 	dst := &TestStream{}
 
-	addr := "127.0.0.1:9101"
+	addr := "localhost:9101"
 	done := make(chan error, 1)
 
 	// Start listener (receiver) in a goroutine
@@ -55,7 +55,8 @@ func TestMemoryStreamTransfer(t *testing.T) {
 }
 
 func TestFileTransferTCP(t *testing.T) {
-	data := []byte("TCP test data for file transfer!")
+	data := []byte("TCP test data for file transfer! TCP test data for file transfer! " +
+		"TCP test data for file transfer! TCP test data for file transfer!")
 	chunkSize := 16
 	src := &TestStream{}
 	src.Write(data)
@@ -68,7 +69,7 @@ func TestFileTransferTCP(t *testing.T) {
 		Transport: TCP_S,
 	}
 	dst := &TestStream{}
-	addr := "127.0.0.1:9102"
+	addr := "localhost:9102"
 	done := make(chan error, 1)
 	go func() {
 		err := AcceptAndHandleOnce(addr, dst)
@@ -111,7 +112,7 @@ func TestFileTransferQUIC(t *testing.T) {
 		QuicAddr:  "localhost:4243",
 	}
 	dst := &TestStream{}
-	addr := "127.0.0.1:9103"
+	addr := "localhost:9103"
 	done := make(chan error, 1)
 	go func() {
 		err := AcceptAndHandleOnce(addr, dst)

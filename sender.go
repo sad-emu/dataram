@@ -14,10 +14,14 @@ import (
 func runQuicSender(addr string, meta FileMetadata, stream Stream) {
 
 	// Start QUIC server for data transfer
-	tlsConf := &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"dataram"}}
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{loadSenderCert()},
+		NextProtos:   []string{"dataram"},
+		ServerName:   "localhost",
+	}
 	listener, err := quic.ListenAddr(meta.QuicAddr, tlsConf, nil)
 	if err != nil {
-		fmt.Println("QUIC listen error:", err)
+		fmt.Println("Sender QUIC listen error:", err)
 		return
 	}
 	defer listener.Close()
@@ -25,18 +29,18 @@ func runQuicSender(addr string, meta FileMetadata, stream Stream) {
 	// Connect to listener via TCP for metadata
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		fmt.Println("Dial error:", err)
+		fmt.Println("Sender TCP Dial error:", err)
 		return
 	}
 	defer conn.Close()
 	if err := json.NewEncoder(conn).Encode(meta); err != nil {
-		fmt.Println("Metadata send error:", err)
+		fmt.Println("Sender Metadata send error:", err)
 		return
 	}
 	// Wait for QUIC session from receiver
 	session, err := listener.Accept(context.Background())
 	if err != nil {
-		fmt.Println("QUIC accept error:", err)
+		fmt.Println("Sender QUIC accept error:", err)
 		return
 	}
 	defer session.CloseWithError(0, "")
@@ -70,12 +74,12 @@ func runQuicSender(addr string, meta FileMetadata, stream Stream) {
 	fmt.Println("File send complete.")
 	// Close the QUIC session
 	if err := session.CloseWithError(0, ""); err != nil {
-		fmt.Println("QUIC session close error:", err)
+		fmt.Println("Sender QUIC session close error:", err)
 		return
 	}
 	// Close the TCP connection
 	if err := conn.Close(); err != nil {
-		fmt.Println("TCP connection close error:", err)
+		fmt.Println("Sender TCP connection close error:", err)
 		return
 	}
 }
@@ -84,12 +88,12 @@ func runTcpSender(addr string, meta FileMetadata, stream Stream) {
 	// Default: TCP
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		fmt.Println("Dial error:", err)
+		fmt.Println("Sender TCP ONLY Dial error:", err)
 		return
 	}
 	defer conn.Close()
 	if err := json.NewEncoder(conn).Encode(meta); err != nil {
-		fmt.Println("Metadata send error:", err)
+		fmt.Println("Sender TCP Metadata send error:", err)
 		return
 	}
 	dec := json.NewDecoder(conn)
@@ -101,7 +105,7 @@ func runTcpSender(addr string, meta FileMetadata, stream Stream) {
 			if err == io.EOF {
 				break
 			}
-			fmt.Println("Request decode error:", err)
+			fmt.Println("Sender TCP Request decode error:", err)
 			return
 		}
 		idx := req["request_chunk"]
@@ -113,16 +117,16 @@ func runTcpSender(addr string, meta FileMetadata, stream Stream) {
 			Data       []byte `json:"data"`
 		}{ChunkIndex: idx, Data: buf[:n]}
 		if err := enc.Encode(chunk); err != nil {
-			fmt.Println("Chunk send error:", err)
+			fmt.Println("Sender TCP Chunk send error:", err)
 			return
 		}
 		progress.Sent[idx] = true
 		fmt.Printf("Sent chunk %d/%d\n", idx+1, progress.TotalChunks)
 	}
-	fmt.Println("File send complete.")
+	fmt.Println("File send complete over TCP.")
 	// Close the TCP connection
 	if err := conn.Close(); err != nil {
-		fmt.Println("TCP connection close error:", err)
+		fmt.Println("TCP ONLY Sender connection close error:", err)
 		return
 	}
 }
@@ -134,4 +138,13 @@ func runSender(addr string, meta FileMetadata, stream Stream) {
 	} else if meta.Transport == TCP_S {
 		runTcpSender(addr, meta, stream)
 	}
+}
+
+// Helper to load the server certificate
+func loadSenderCert() tls.Certificate {
+	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	if err != nil {
+		panic("failed to load server TLS cert: " + err.Error())
+	}
+	return cert
 }

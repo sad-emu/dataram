@@ -55,12 +55,13 @@ func AcceptAndHandleOnce(addr string, stream Stream) error {
 func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResultsChan chan ChunkResult, stream Stream, progress *Progress) {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{loadListenerCert()},
 		NextProtos:         []string{"dataram"},
 		ServerName:         "localhost",
 	}
 	session, err := quic.DialAddr(context.Background(), meta.QuicAddr, tlsConf, nil)
 	if err != nil {
-		fmt.Println("QUIC dial error:", err)
+		fmt.Println("Listener QUIC dial error:", err)
 		return
 	}
 	defer session.CloseWithError(0, "")
@@ -107,7 +108,7 @@ func handleQuic(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResu
 		receivedCount++
 	}
 	wg.Wait()
-	fmt.Println("File transfer complete.")
+	fmt.Println("Listener QUIC File transfer complete.")
 }
 
 func handleTcp(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResultsChan chan ChunkResult, stream Stream, progress *Progress, dec *json.Decoder, conn net.Conn) {
@@ -154,6 +155,15 @@ func handleTcp(meta FileMetadata, mu *sync.Mutex, wg *sync.WaitGroup, chunkResul
 	}
 	wg.Wait()
 	fmt.Println("File transfer complete.")
+}
+
+// Helper to load the server certificate
+func loadListenerCert() tls.Certificate {
+	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	if err != nil {
+		panic("failed to load server TLS cert: " + err.Error())
+	}
+	return cert
 }
 
 func handleSender(conn net.Conn, stream Stream) {
