@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // TestStream: In-memory stream with absolute-position seeking
@@ -47,7 +48,12 @@ type FileStream struct {
 }
 
 func NewFileStream(filename string) (*FileStream, error) {
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
+	dir := GlobalSettings.StorageDir
+	if dir == "" {
+		dir = "."
+	}
+	fullPath := filepath.Join(dir, filename)
+	f, err := os.OpenFile(fullPath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -76,20 +82,4 @@ type Stream interface {
 	io.Reader
 	io.Writer
 	SeekAbsolute(pos int64) error
-}
-
-// Example logic
-func writeAt(stream Stream, pos int64, data []byte) {
-	if err := stream.SeekAbsolute(pos); err != nil {
-		fmt.Println("Seek error:", err)
-		return
-	}
-	stream.Write(data)
-}
-
-func readFromStart(stream Stream) {
-	stream.SeekAbsolute(0)
-	buf := make([]byte, 64)
-	n, _ := stream.Read(buf)
-	fmt.Println("Read from start:", string(buf[:n]))
 }

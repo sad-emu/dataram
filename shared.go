@@ -1,5 +1,11 @@
 package main
 
+import (
+	"encoding/json"
+	"os"
+	"sync"
+)
+
 const (
 	TCP_S  = "TCP"
 	QUIC_S = "QUIC"
@@ -61,4 +67,53 @@ func (pm *ProgressManager) GetOrCreate(uuid string, totalChunks int) *Progress {
 
 func (pm *ProgressManager) Remove(uuid string) {
 	delete(pm.progressMap, uuid)
+}
+
+type ActiveTransfer struct {
+	Meta   FileMetadata
+	Stream Stream
+}
+
+type ActiveTransfers struct {
+	mu        sync.Mutex
+	transfers map[string]*ActiveTransfer
+}
+
+func NewActiveTransfers() *ActiveTransfers {
+	return &ActiveTransfers{transfers: make(map[string]*ActiveTransfer)}
+}
+
+func (at *ActiveTransfers) Get(uuid string) (*ActiveTransfer, bool) {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	tr, ok := at.transfers[uuid]
+	return tr, ok
+}
+
+func (at *ActiveTransfers) Add(uuid string, meta FileMetadata, stream Stream) {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	at.transfers[uuid] = &ActiveTransfer{Meta: meta, Stream: stream}
+}
+
+func (at *ActiveTransfers) Remove(uuid string) {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	delete(at.transfers, uuid)
+}
+
+type Settings struct {
+	StorageDir string `json:"storage_dir"`
+}
+
+var GlobalSettings Settings
+
+func LoadSettings(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	return dec.Decode(&GlobalSettings)
 }
