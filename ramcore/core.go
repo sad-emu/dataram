@@ -1,14 +1,8 @@
 package ramcore
 
-import (
-	"data_ram/ramio"
-)
-
 // Core coordinates listeners and senders using the config.
 type Core struct {
-	Config   Config
-	Listener ramio.Listener
-	Sender   ramio.Sender
+	Config Config
 }
 
 func NewCore(cfg Config) *Core {
