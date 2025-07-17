@@ -1,0 +1,21 @@
+{
+    // ...existing code...
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "go build .",
+            "group": "build",
+            "problemMatcher": ["$go"]
+        },
+        {
+            "label": "run",
+            "type": "shell",
+            "command": "go run .",
+            "group": "test",
+            "problemMatcher": ["$go"]
+        }
+    ]
+    // ...existing code...
+}
