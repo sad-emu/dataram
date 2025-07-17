@@ -2,6 +2,7 @@ package ramio
 
 import (
 	"data_ram/ramstream"
+	"fmt"
 )
 
 // DummyStream for testing purposes
@@ -9,6 +10,7 @@ type DummyStream struct {
 	StreamType string
 	Position   int64
 	Data       []byte
+	SubStream  ramstream.RamStream
 }
 
 // Constructor for DummyStream
@@ -17,12 +19,16 @@ func NewDummyStream(streamType string) *DummyStream {
 		StreamType: streamType,
 		Position:   0,
 		Data:       make([]byte, 0),
+		SubStream:  nil,
 	}
 }
 
 func (d *DummyStream) Read(p []byte) (int, error) {
 	if d.StreamType != ramstream.DRInputStream {
-		return 0, nil
+		return 0, fmt.Errorf("Cannot read on output stream")
+	}
+	if d.SubStream != nil {
+		return d.SubStream.Read(p)
 	}
 	if d.Position >= int64(len(d.Data)) {
 		return 0, nil
@@ -34,7 +40,10 @@ func (d *DummyStream) Read(p []byte) (int, error) {
 
 func (d *DummyStream) Write(p []byte) (int, error) {
 	if d.StreamType != ramstream.DROutputStream {
-		return 0, nil
+		return 0, fmt.Errorf("Cannot write on input stream")
+	}
+	if d.SubStream != nil {
+		return d.SubStream.Write(p)
 	}
 	d.Data = append(d.Data, p...)
 	return len(p), nil

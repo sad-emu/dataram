@@ -3,32 +3,40 @@ package ramio
 import (
 	"data_ram/ramstream"
 	"testing"
+	"time"
 )
 
 // TCPStream backed by DummyStreams for testing
 func TestTCPStreamWithDummyStreams(t *testing.T) {
-	input := &DummyStream{StreamType: ramstream.DRInputStream, Data: []byte("abc")}
-	output := &DummyStream{StreamType: ramstream.DROutputStream}
+	// Create DummyStreams for input and output
+	input := &DummyStream{StreamType: ramstream.DROutputStream}
+	output := &DummyStream{StreamType: ramstream.DRInputStream}
 
-	// Simulate TCPListener reading from input DummyStream
-	buf := make([]byte, 3)
-	n, err := input.Read(buf)
-	if err != nil || n != 3 || string(buf) != "abc" {
-		t.Fatalf("DummyStream input failed: %v, %d, %s", err, n, buf)
+	// Wrap DummyStreams with TCPStream for testing
+	address := "127.0.0.1:9100"
+	tcpSender := NewTCPStream(address, ramstream.DROutputStream, input)
+	tcpListener := NewTCPStream(address, ramstream.DROutputStream, output)
+
+	input.SubStream = tcpSender
+
+	go tcpListener.Listen()
+
+	// wait for listener to start
+	time.Sleep(100 * time.Millisecond)
+
+	dataToSend := []byte("abcdefg")
+	num, err := input.Write(dataToSend)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
 	}
-
-	// Simulate TCPSender writing to output DummyStream
-	n2, err2 := output.Write(buf)
-	if err2 != nil || n2 != 3 {
-		t.Fatalf("DummyStream output failed: %v, %d", err2, n2)
+	if num != len(dataToSend) {
+		t.Fatalf("Write length mismatch: got %d, want %d", num, len(dataToSend))
 	}
-
-	// Read back from output DummyStream
-	output.StreamType = ramstream.DRInputStream
-	output.Reset()
-	buf2 := make([]byte, 3)
-	n3, err3 := output.Read(buf2)
-	if err3 != nil || n3 != 3 || string(buf2) != "abc" {
-		t.Fatalf("DummyStream output read failed: %v, %d, %s", err3, n3, buf2)
+	// Data is empty for some reason???
+	// Verify output.data equals dataToSend and error if not equal
+	for i := 0; i < len(dataToSend); i++ {
+		if output.Data[i] != dataToSend[i] {
+			t.Errorf("Expected %c, got %c at index %d", dataToSend[i], output.Data[i], i)
+		}
 	}
 }

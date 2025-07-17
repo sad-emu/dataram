@@ -14,6 +14,15 @@ type TCPStream struct {
 	InternalStream ramstream.RamStream
 }
 
+// Constructor for TCPStream that sets the address and stream type.
+func NewTCPStream(address string, streamType string, internalStream ramstream.RamStream) *TCPStream {
+	return &TCPStream{
+		Address:        address,
+		StreamType:     streamType,
+		InternalStream: internalStream,
+	}
+}
+
 func (t *TCPStream) Listen() error {
 	// Check stream type
 	if t.StreamType != ramstream.DROutputStream {
