@@ -1,8 +1,8 @@
 package ramio
 
 import (
-	"testing"
 	"data_ram/ramstream"
+	"testing"
 )
 
 func TestDummyStream_WriteRead(t *testing.T) {

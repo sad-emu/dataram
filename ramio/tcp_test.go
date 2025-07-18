@@ -10,7 +10,7 @@ import (
 func TestTCPStreamWithDummyStreams(t *testing.T) {
 	// Create DummyStreams for input and output
 	input := &DummyStream{StreamType: ramstream.DROutputStream}
-	output := &DummyStream{StreamType: ramstream.DRInputStream}
+	output := &DummyStream{StreamType: ramstream.DROutputStream}
 
 	// Wrap DummyStreams with TCPStream for testing
 	address := "127.0.0.1:9100"
