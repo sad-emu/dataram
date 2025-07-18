@@ -14,7 +14,7 @@ func TestTCPStreamWithDummyStreams(t *testing.T) {
 
 	// Wrap DummyStreams with TCPStream for testing
 	address := "127.0.0.1:9100"
-	tcpSender := NewTCPStream(address, ramstream.DROutputStream, input)
+	tcpSender := NewTCPStream(address, ramstream.DROutputStream, nil)
 	tcpListener := NewTCPStream(address, ramstream.DROutputStream, output)
 
 	input.SubStream = tcpSender

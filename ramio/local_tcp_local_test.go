@@ -1,66 +1,62 @@
 package ramio
 
 import (
+	"data_ram/ramstream"
+	"os"
 	"testing"
+	"time"
 )
 
 func TestLocalToTCPToLocalStream(t *testing.T) {
-	return
-	// os.MkdirAll("test_data", 0755)
-	// inputFile := "test_data/input.txt"
-	// outputFile := "test_data/output.txt"
-	// defer os.Remove(inputFile)
-	// defer os.Remove(outputFile)
 
-	// // Write initial data to input file
-	// inputData := []byte("stream integration test")
-	// if err := os.WriteFile(inputFile, inputData, 0644); err != nil {
-	// 	t.Fatalf("Failed to write input file: %v", err)
-	// }
+	os.MkdirAll("test_data", 0755)
+	inputFile := "test_data/input.txt"
+	outputFile := "test_data/output.txt"
+	defer os.Remove(inputFile)
+	defer os.Remove(outputFile)
 
-	// // LocalStream for reading
-	// localIn := NewLocalStream(ramstream.DRInputStream, inputFile)
-	// // LocalStream for writing
-	// localOut := NewLocalStream(ramstream.DROutputStream, outputFile)
+	// Write initial data to input file
+	inputData := []byte("stream integration test")
+	if err := os.WriteFile(inputFile, inputData, 0644); err != nil {
+		t.Fatalf("Failed to write input file: %v", err)
+	}
 
-	// // TCPListener and TCPSender
-	// address := "127.0.0.1:9100"
-	// tcpStream := NewTCPStream(address)
-	// listener := tcpStream
-	// sender := tcpStream
+	// LocalStream for reading
+	localIn := NewLocalStream(ramstream.DRInputStream, inputFile)
+	// LocalStream for writing
+	localOut := NewLocalStream(ramstream.DROutputStream, outputFile)
 
-	// // Start TCPListener in a goroutine, writing received data to localOut
-	// errCh := make(chan error, 1)
-	// go func() {
-	// 	errCh <- listener.Listen()
-	// 	for listener.Len() > 0 {
-	// 		buf := make([]byte, listener.Len())
-	// 		_, _ = listener.Read(buf)
-	// 		_, _ = localOut.Write(buf)
-	// 	}
-	// }()
+	// TCPListener and TCPSender
+	address := "127.0.0.1:9100"
+	sender := NewTCPStream(address, ramstream.DROutputStream, nil)
+	listener := NewTCPStream(address, ramstream.DROutputStream, localOut)
 
-	// time.Sleep(100 * time.Millisecond) // Give listener time to start
+	go listener.Listen()
 
-	// // Read from localIn and send via TCPSender
-	// buf := make([]byte, localIn.Len())
-	// _, err := localIn.Read(buf)
-	// if err != nil {
-	// 	t.Fatalf("LocalStream read failed: %v", err)
-	// }
-	// err = sender.Send(buf)
-	// if err != nil {
-	// 	t.Fatalf("TCPSender send failed: %v", err)
-	// }
+	// wait for listener to start
+	time.Sleep(100 * time.Millisecond)
 
-	// time.Sleep(200 * time.Millisecond) // Give listener time to process
+	buf := make([]byte, 1024)
+	n, err := localIn.Read(buf)
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	dataToSend := buf[:n]
+	num, err := sender.Write(dataToSend)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if num != len(dataToSend) {
+		t.Fatalf("Write length mismatch: got %d, want %d", num, len(dataToSend))
+	}
 
-	// // Verify output file contents
-	// outData, err := os.ReadFile(outputFile)
-	// if err != nil {
-	// 	t.Fatalf("Failed to read output file: %v", err)
-	// }
-	// if string(outData) != string(inputData) {
-	// 	t.Fatalf("Output data mismatch: got %s, want %s", outData, inputData)
-	// }
+	// Verify output file contains the same data
+	outputData, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("Failed to read output file: %v", err)
+	}
+	if string(outputData) != string(dataToSend) {
+		t.Fatalf("Output data mismatch: got %s, want %s", outputData, dataToSend)
+	}
+
 }

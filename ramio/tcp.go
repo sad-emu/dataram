@@ -111,8 +111,8 @@ func (t *TCPStream) Write(p []byte) (int, error) {
 	if t.StreamType != ramstream.DROutputStream {
 		return 0, fmt.Errorf("Cannot write to input stream")
 	}
-	if t.InternalStream == nil {
-		return 0, fmt.Errorf("Internal stream is not initialized")
+	if t.InternalStream != nil {
+		return 0, fmt.Errorf("Internal stream should not be initialised for TCP writing") // This should not be set for writing
 	}
 	return t.Send(p)
 }
