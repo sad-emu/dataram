@@ -32,7 +32,7 @@ func TestQUICStreamWithDummyStreams(t *testing.T) {
 
 	input.SubStream = quicSender
 
-	go quicListener.Listen()
+	go quicListener.Listen(1024)
 
 	// wait for listener to start
 	time.Sleep(100 * time.Millisecond)

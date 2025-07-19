@@ -27,11 +27,11 @@ func TestLocalToTCPToLocalStream(t *testing.T) {
 	localOut := NewLocalStream(ramstream.DROutputStream, outputFile)
 
 	// TCPListener and TCPSender
-	address := "127.0.0.1:9100"
+	address := "127.0.0.1:9101"
 	sender := NewTCPStream(address, ramstream.DROutputStream, nil)
 	listener := NewTCPStream(address, ramstream.DROutputStream, localOut)
 
-	go listener.Listen()
+	go listener.Listen(1024)
 
 	// wait for listener to start
 	time.Sleep(100 * time.Millisecond)

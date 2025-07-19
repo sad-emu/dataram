@@ -51,7 +51,7 @@ func TestDummyStream_StreamTypeEnforcement(t *testing.T) {
 	stream := NewDummyStream(ramstream.DRInputStream)
 	data := []byte("should not write")
 	n, err := stream.Write(data)
-	if n != 0 || err != nil {
+	if n != 0 || err == nil {
 		t.Fatalf("Write should not succeed for input stream")
 	}
 
@@ -59,7 +59,7 @@ func TestDummyStream_StreamTypeEnforcement(t *testing.T) {
 	buf := make([]byte, 10)
 	stream.Reset()
 	n2, err2 := stream.Read(buf)
-	if n2 != 0 || err2 != nil {
+	if n2 != 0 || err2 == nil {
 		t.Fatalf("Read should not succeed for output stream")
 	}
 }

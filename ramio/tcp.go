@@ -23,7 +23,7 @@ func NewTCPStream(address string, streamType string, internalStream ramstream.Ra
 	}
 }
 
-func (t *TCPStream) Listen() error {
+func (t *TCPStream) Listen(bufferSize int) error {
 	// Check stream type
 	if t.StreamType != ramstream.DROutputStream {
 		return fmt.Errorf("Cannot listen on input stream")
@@ -42,7 +42,7 @@ func (t *TCPStream) Listen() error {
 		}
 		go func(c net.Conn) {
 			defer c.Close()
-			buf := make([]byte, 4096)
+			buf := make([]byte, bufferSize)
 			n, err := c.Read(buf)
 			if err == nil && n > 0 {
 				outN, _ := t.InternalStream.Write(buf[:n])

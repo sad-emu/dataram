@@ -19,7 +19,7 @@ func TestTCPStreamWithDummyStreams(t *testing.T) {
 
 	input.SubStream = tcpSender
 
-	go tcpListener.Listen()
+	go tcpListener.Listen(1024)
 
 	// wait for listener to start
 	time.Sleep(100 * time.Millisecond)

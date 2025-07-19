@@ -27,7 +27,7 @@ func NewQUICStream(address string, streamType string, internalStream ramstream.R
 	}
 }
 
-func (q *QUICStream) Listen() error {
+func (q *QUICStream) Listen(bufferSize int) error {
 	if q.StreamType != ramstream.DROutputStream {
 		return fmt.Errorf("Cannot listen on input stream")
 	}
@@ -47,7 +47,7 @@ func (q *QUICStream) Listen() error {
 			if err != nil {
 				return
 			}
-			buf := make([]byte, 4096)
+			buf := make([]byte, bufferSize)
 			n, err := stream.Read(buf)
 			if err == nil && n > 0 {
 				outN, _ := q.InternalStream.Write(buf[:n])
