@@ -6,12 +6,20 @@ import (
 )
 
 const (
-	DRInputFile   = "inputFile"
-	DROutputFile  = "outputFile"
-	DRFileNameKey = "filename"
-	DRFileSizeKey = "filesize"
-	DRUUIDKey     = "uuid"
+	DRInputFile       = "inputFile"
+	DROutputFile      = "outputFile"
+	DRFileNameKey     = "filename"
+	DRFileSizeKey     = "filesize"
+	DRUUIDKey         = "uuid"
+	DRSendStartKey    = "sendStartTimestamp"
+	DRSendEndKey      = "sendEndTimestamp"
+	DRRecieveStartKey = "receiveStartTimestamp"
+	DRRecieveEndKey   = "receiveEndTimestamp"
+	DRChunkSizeKey    = "chunkSize"
+	DRNumChunks       = "numChunks"
 )
+
+// Should we just give a stream here instead of path?
 
 type RamFile struct {
 	LocalPath   string
