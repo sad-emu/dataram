@@ -87,12 +87,23 @@ func (t *TCPStream) Listen(bufferSize int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancelListen = cancel // Store cancel func to use in Flush
 
+	var handleListenRunning bool
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return err // this will happen when listener is closed
 		}
-		go t.handleListen(ctx, conn, bufferSize)
+		if handleListenRunning {
+			fmt.Println("Stopping new connection attempted while another is running on address", t.Address)
+			conn.Close()
+			continue
+		}
+		handleListenRunning = true
+		go func() {
+			t.handleListen(ctx, conn, bufferSize)
+			handleListenRunning = false
+		}()
 	}
 }
 
