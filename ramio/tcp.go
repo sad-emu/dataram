@@ -1,9 +1,17 @@
 package ramio
 
 import (
+	"context"
 	"data_ram/ramstream"
 	"fmt"
 	"net"
+)
+
+// Define const header bytes
+const (
+	TCP_KEEPALIVE = 1 // Size of the header for int64 response
+	TCP_DATA      = 2
+	TCP_CLOSE     = 3
 )
 
 // TCPListener implements Listener for TCP connections.
@@ -12,6 +20,8 @@ type TCPStream struct {
 	listener       net.Listener
 	StreamType     string
 	InternalStream ramstream.RamStream
+	tcpCon         net.Conn
+	cancelListen   context.CancelFunc // Added to cancel goroutines
 }
 
 // Constructor for TCPStream that sets the address and stream type.
@@ -23,6 +33,43 @@ func NewTCPStream(address string, streamType string, internalStream ramstream.Ra
 	}
 }
 
+func (t *TCPStream) handleListen(ctx context.Context, c net.Conn, bufferSize int) {
+	defer c.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("TCP handler cancelled")
+			return
+		default:
+			respN, err := readInt64(c)
+			if err != nil {
+				fmt.Printf("TCP read failed: %v\n", err)
+				return
+			}
+			switch respN {
+			case TCP_CLOSE:
+				return
+			case TCP_KEEPALIVE:
+				writeInt64(c, int64(TCP_KEEPALIVE))
+			case TCP_DATA:
+				buf := make([]byte, bufferSize)
+				n, err := c.Read(buf)
+				if err == nil && n > 0 {
+					outN, _ := t.InternalStream.Write(buf[:n])
+					writeInt64(c, int64(outN))
+				} else {
+					fmt.Printf("TCP failed to read from stream; closing\n")
+					return
+				}
+			default:
+				fmt.Printf("Unknown TCP header type: %d\n", respN)
+				return
+			}
+		}
+	}
+}
+
 func (t *TCPStream) Listen(bufferSize int) error {
 	// Check stream type
 	if t.StreamType != ramstream.DROutputStream {
@@ -31,40 +78,54 @@ func (t *TCPStream) Listen(bufferSize int) error {
 
 	ln, err := net.Listen("tcp", t.Address)
 	if err != nil {
+		fmt.Println("Failed to listen on", t.Address)
 		return err
 	}
 	t.listener = ln
 	fmt.Println("Listening on", t.Address)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.cancelListen = cancel // Store cancel func to use in Flush
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			return err
+			return err // this will happen when listener is closed
 		}
-		go func(c net.Conn) {
-			defer c.Close()
-			buf := make([]byte, bufferSize)
-			n, err := c.Read(buf)
-			if err == nil && n > 0 {
-				outN, _ := t.InternalStream.Write(buf[:n])
-				writeInt64(c, int64(outN))
-			}
-		}(conn)
+		go t.handleListen(ctx, conn, bufferSize)
 	}
 }
 
 // Update Send to wait for response
 func (t *TCPStream) Send(data []byte) (int, error) {
-	conn, err := net.Dial("tcp", t.Address)
+	if t.tcpCon != nil && t.tcpCon.RemoteAddr() != nil {
+		err := writeInt64(t.tcpCon, int64(TCP_KEEPALIVE))
+		resp, err := readInt64(t.tcpCon)
+		if err != nil || resp != int64(TCP_KEEPALIVE) {
+			t.tcpCon.Close()
+			t.tcpCon = nil
+			fmt.Printf("TCP keepalive failed: %v\n", err)
+		}
+	}
+
+	if t.tcpCon == nil {
+		con, err := net.Dial("tcp", t.Address)
+		if err != nil {
+			fmt.Printf("TCP dial failed: %v\n", err)
+			return 0, err
+		}
+		t.tcpCon = con
+	}
+	err := writeInt64(t.tcpCon, int64(TCP_DATA))
 	if err != nil {
 		return 0, err
 	}
-	defer conn.Close()
-	n, err := conn.Write(data)
+	n, err := t.tcpCon.Write(data)
 	if err != nil {
 		return n, err
 	}
 	// Wait for response
-	respN, err := readInt64(conn)
+	respN, err := readInt64(t.tcpCon)
 	if err != nil {
 		return 0, fmt.Errorf("Failed to read response: %w", err)
 	}
@@ -100,6 +161,14 @@ func (t *TCPStream) Len() int {
 }
 
 func (t *TCPStream) Flush() error {
+	if t.listener != nil {
+		t.listener.Close()
+		t.listener = nil
+	}
+	if t.cancelListen != nil {
+		t.cancelListen()
+		t.cancelListen = nil
+	}
 	return nil
 }
 

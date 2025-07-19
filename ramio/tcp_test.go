@@ -39,4 +39,51 @@ func TestTCPStreamWithDummyStreams(t *testing.T) {
 			t.Errorf("Expected %c, got %c at index %d", dataToSend[i], output.Data[i], i)
 		}
 	}
+	tcpListener.Flush()
+}
+
+func TestTCPReuseStreamWithDummyStreams(t *testing.T) {
+	// Create DummyStreams for input and output
+	input := &DummyStream{StreamType: ramstream.DROutputStream}
+	output := &DummyStream{StreamType: ramstream.DROutputStream}
+
+	// Wrap DummyStreams with TCPStream for testing
+	address := "127.0.0.1:9100"
+	tcpSender := NewTCPStream(address, ramstream.DROutputStream, nil)
+	tcpListener := NewTCPStream(address, ramstream.DROutputStream, output)
+
+	input.SubStream = tcpSender
+
+	go tcpListener.Listen(1024)
+
+	// wait for listener to start
+	time.Sleep(100 * time.Millisecond)
+
+	dataToSend := []byte("abcdefg")
+	num, err := input.Write(dataToSend)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if num != len(dataToSend) {
+		t.Fatalf("Write length mismatch: got %d, want %d", num, len(dataToSend))
+	}
+
+	dataToSendAgain := []byte("34567890-adfadsfa!@#$!@#%^!#$^$#")
+	num, err = input.Write(dataToSendAgain)
+	if err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	if num != len(dataToSendAgain) {
+		t.Fatalf("Write length mismatch: got %d, want %d", num, len(dataToSendAgain))
+	}
+
+	// append dataToSendAgain to dataToSend
+	dataToSend = append(dataToSend, dataToSendAgain...)
+
+	for i := 0; i < len(dataToSend); i++ {
+		if output.Data[i] != dataToSend[i] {
+			t.Errorf("Expected %c, got %c at index %d", dataToSend[i], output.Data[i], i)
+		}
+	}
+	tcpListener.Flush()
 }
