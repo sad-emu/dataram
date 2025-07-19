@@ -53,6 +53,7 @@ func NewRamBundle(chunkSize int64, maxBundleCount int, maxQueueSize int) *RamBun
 		exportBundle:   make([]RamFile, 0),
 		chunkSize:      chunkSize,
 		maxBundleCount: maxBundleCount,
+		maxQueueSize:   maxQueueSize,
 		exportFinished: true,
 	}
 }
@@ -159,14 +160,16 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 		if err != nil || sizeVal <= 0 {
 			return nil, fmt.Errorf("Error parsing file %s cannot add file to bundle: %v", rf.LocalPath, err)
 		}
-		lastFileBytes = countBytes
-		countBytes += int64(sizeVal)
-		if countBytes <= sentBytes {
+
+		/// TODO work out again exactly what we need
+		lastFileBytes = sentBytes
+		if countBytes <= sentBytes && sentBytes != 0 {
 			// Skip this file, we have already sent it
 			continue
 		}
 
 		relativePosition := countBytes - lastFileBytes
+
 		amountToRead := lastFileBytes + rb.chunkSize
 		if amountToRead > sizeVal {
 			amountToRead = sizeVal
@@ -200,5 +203,5 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 		bytesBundle = append(bytesBundle, bundleChunk...)
 	}
 
-	return nil, fmt.Errorf("GetNextBundle not implemented yet")
+	return bytesBundle, nil
 }

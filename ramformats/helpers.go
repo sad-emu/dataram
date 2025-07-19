@@ -41,6 +41,10 @@ func IntToBytes(intToConvert int) []byte {
 	return headerBytes
 }
 
+func BytesToInt(data []byte) int {
+	return int(binary.BigEndian.Uint32(data))
+}
+
 func Int64ToBytes(intToConvert int64) []byte {
 	headerBytes := make([]byte, 8)
 	binary.BigEndian.PutUint64(headerBytes, uint64(intToConvert))

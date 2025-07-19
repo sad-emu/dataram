@@ -26,7 +26,7 @@ func TestRamBundle_GetNextBundle(t *testing.T) {
 	files := make([]string, fileCount)
 	fileData := make([][]byte, fileCount)
 	for i := 0; i < fileCount; i++ {
-		filename := fmt.Sprintf("test_bundle_file_%d.bin", i)
+		filename := fmt.Sprintf("test_data/test_bundle_file_%d.bin", i)
 		data, err := createTestFile(filename, fileSize)
 		if err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
@@ -38,7 +38,7 @@ func TestRamBundle_GetNextBundle(t *testing.T) {
 
 	// Create a new RamBundle
 	chunkSize := int64(512)
-	maxBundleCount := 3
+	maxBundleCount := 4
 	maxQueueSize := 10
 	rb := NewRamBundle(chunkSize, maxBundleCount, maxQueueSize)
 
@@ -83,7 +83,7 @@ func TestRamBundle_GetNextBundle(t *testing.T) {
 			t.Errorf("Bundle too short to contain header")
 			continue
 		}
-		header := int(bundle[0])
+		header := BytesToInt(bundle[0:4])
 		if header == METADATA_HEADER {
 			foundMeta = true
 			// Optionally, check metadata format here
