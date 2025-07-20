@@ -24,18 +24,18 @@ const (
 // Multiple data blocks may result from a single bundle. Only a single metadata map will be created for each bundle.
 
 type RamBundle struct {
-	fileQueue      []RamFile
-	exportBundle   []RamFile
-	exportMeta     map[string]map[string]string // Metadata for the export bundle (map of string to map of strings)
-	exportStatus   map[string]string            // Status of each file in the export bundle
-	exportFinished bool                         // Flag to indicate if the export is finished
-	sentMetaData   bool                         // Flag to indicate if metadata has been sent
-	bundlesSent    int64                        // Number of bundles sent
-	totalBundles   int64                        // Total number of bundles to be sent
-	maxQueueSize   int                          // Maximum size of the queue
-	chunkSize      int64
-	maxBundleCount int
-	mu             sync.Mutex // Mutex to protect concurrent access
+	fileQueue        []RamFile
+	exportBundle     []RamFile
+	exportMeta       map[string]map[string]string // Metadata for the export bundle (map of string to map of strings)
+	exportBundleMeta []BundleMeta                 // Metadata of each package
+	exportFinished   bool                         // Flag to indicate if the export is finished
+	sentMetaData     bool                         // Flag to indicate if metadata has been sent
+	bundlesSent      int64                        // Number of bundles sent
+	totalBundles     int64                        // Total number of bundles to be sent
+	maxQueueSize     int                          // Maximum size of the queue
+	chunkSize        int64
+	maxBundleCount   int
+	mu               sync.Mutex // Mutex to protect concurrent access
 }
 
 func popFront(files *[]RamFile) (RamFile, bool) {
@@ -74,7 +74,7 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 	// Get and return the next chunk
 	if rb.bundlesSent >= rb.totalBundles {
 		rb.exportFinished = true // All bundles have been sent
-		rb.exportStatus = make(map[string]string)
+		rb.exportBundleMeta = nil
 		rb.exportBundle = rb.exportBundle[:0] // Clear the export bundle
 	}
 
@@ -124,7 +124,12 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 			rb.sentMetaData = false
 
 			// How many bundles do we need to send
-			rb.totalBundles = newBundleSize / rb.chunkSize
+			// I don't kow how to do division on 64bit ints
+			for newBundleSize > 0 {
+				rb.totalBundles += 1
+				newBundleSize -= rb.chunkSize
+			}
+
 		} else {
 			// No more files to process, return nil
 			return nil, nil
@@ -150,9 +155,14 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 	bytesBundle := make([]byte, 0)
 	headerBytes := IntToBytes(DATA_HEADER)
 	bytesBundle = append(headerBytes, bytesBundle...)
-	sentBytes := int64(rb.chunkSize) * int64(rb.bundlesSent)
-	countBytes := int64(0)
-	lastFileBytes := int64(0)
+	// Bytes we have sent on the previous bundle
+	bundleTotalPosition := int64(rb.chunkSize) * int64(rb.bundlesSent)
+	bundleRelativePosition := int64(0)
+	thisBundleBytes := int64(0)
+	// // Bytes we have sent in the current bundle
+	// currentFilePosition := int64(0)
+	// What pos in the current file do we start to read from
+
 	for i := 0; i < len(rb.exportBundle); i++ {
 		// Iterate over the files until we reach sentBytes
 		rf := rb.exportBundle[i]
@@ -161,18 +171,19 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 			return nil, fmt.Errorf("Error parsing file %s cannot add file to bundle: %v", rf.LocalPath, err)
 		}
 
-		/// TODO work out again exactly what we need
-		lastFileBytes = sentBytes
-		if countBytes <= sentBytes && sentBytes != 0 {
-			// Skip this file, we have already sent it
+		// If we write this file out and we still havent caught up to our relative position
+		// This file must be completed
+		if bundleRelativePosition+sizeVal < bundleTotalPosition {
+			bundleRelativePosition = bundleRelativePosition + sizeVal
 			continue
 		}
 
-		relativePosition := countBytes - lastFileBytes
+		currentFilePosition := bundleTotalPosition - bundleRelativePosition
 
-		amountToRead := lastFileBytes + rb.chunkSize
-		if amountToRead > sizeVal {
-			amountToRead = sizeVal
+		// Don't over-read if we are partway through a file
+		amountToRead := rb.chunkSize - thisBundleBytes
+		if (amountToRead + currentFilePosition) > sizeVal {
+			amountToRead = (sizeVal - currentFilePosition)
 		}
 
 		bundleChunk := make([]byte, amountToRead)
@@ -183,25 +194,30 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 			return nil, fmt.Errorf("failed to open file: %w", err)
 		}
 
-		n, err := fileHandle.ReadAt(bundleChunk, relativePosition)
+		n, err := fileHandle.ReadAt(bundleChunk, currentFilePosition)
 		if err != nil {
 			if err == io.EOF {
 				return nil, nil // Return number of bytes read before EOF
 			}
 			return nil, fmt.Errorf("failed to read from file: %w", err)
 		}
-		countBytes += int64(n)
 
 		// append bytesBundle to bundleChunk\
 		// TODO format (UUID, start_pos, len, Datablob)
 		uuidBytes := []byte(rf.UUID)
-		startPos := Int64ToBytes(relativePosition)
+		startPos := Int64ToBytes(currentFilePosition)
 		len := IntToBytes(n)
 		bytesBundle = append(bytesBundle, uuidBytes...)
 		bytesBundle = append(bytesBundle, startPos...)
 		bytesBundle = append(bytesBundle, len...)
 		bytesBundle = append(bytesBundle, bundleChunk...)
+		thisBundleBytes += int64(n)
+
+		// Update relative position
+		bundleRelativePosition += int64(n)
+		bundleTotalPosition += int64(n)
 	}
 
+	rb.bundlesSent += 1
 	return bytesBundle, nil
 }
