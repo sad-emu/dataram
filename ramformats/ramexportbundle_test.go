@@ -40,7 +40,7 @@ func TestRamBundle_GetNextBundleLite(t *testing.T) {
 	chunkSize := int64(512)
 	maxBundleCount := 4
 	maxQueueSize := 10
-	rb := NewRamBundle(chunkSize, maxBundleCount, maxQueueSize)
+	rb := NewRamExportBundle(chunkSize, maxBundleCount, maxQueueSize)
 
 	// Add files to the bundle
 	for i := 0; i < fileCount; i++ {
@@ -56,7 +56,7 @@ func TestRamBundle_GetNextBundleLite(t *testing.T) {
 	// Call GetNextBundle until all bundles are sent
 	bundleDatas := make([][]byte, 0)
 	for {
-		bundle, err := rb.GetNextBundle()
+		bundle, err := rb.GetNextExportBundle()
 		if err != nil {
 			// Only allow "GetNextBundle not implemented yet" error for now
 			if err.Error() == "GetNextBundle not implemented yet" {
@@ -83,7 +83,8 @@ func TestRamBundle_GetNextBundleLite(t *testing.T) {
 			t.Errorf("Bundle too short to contain header")
 			continue
 		}
-		header := BytesToInt(bundle[0:4])
+		// data version header infront
+		header := BytesToInt(bundle[4:8])
 		if header == METADATA_HEADER {
 			foundMeta = true
 			// Optionally, check metadata format here
@@ -101,6 +102,7 @@ func TestRamBundle_GetNextBundleLite(t *testing.T) {
 	if !foundData {
 		t.Error("No data bundle found")
 	}
+
 }
 
 func TestRamBundle_GetNextBundleBigLite(t *testing.T) {
@@ -124,7 +126,7 @@ func TestRamBundle_GetNextBundleBigLite(t *testing.T) {
 	chunkSize := int64(1200)
 	maxBundleCount := 4
 	maxQueueSize := 10
-	rb := NewRamBundle(chunkSize, maxBundleCount, maxQueueSize)
+	rb := NewRamExportBundle(chunkSize, maxBundleCount, maxQueueSize)
 
 	// Add files to the bundle
 	for i := 0; i < fileCount; i++ {
@@ -140,7 +142,7 @@ func TestRamBundle_GetNextBundleBigLite(t *testing.T) {
 	// Call GetNextBundle until all bundles are sent
 	bundleDatas := make([][]byte, 0)
 	for {
-		bundle, err := rb.GetNextBundle()
+		bundle, err := rb.GetNextExportBundle()
 		if err != nil {
 			// Only allow "GetNextBundle not implemented yet" error for now
 			if err.Error() == "GetNextBundle not implemented yet" {
@@ -167,7 +169,7 @@ func TestRamBundle_GetNextBundleBigLite(t *testing.T) {
 			t.Errorf("Bundle too short to contain header")
 			continue
 		}
-		header := BytesToInt(bundle[0:4])
+		header := BytesToInt(bundle[4:8])
 		if header == METADATA_HEADER {
 			foundMeta = true
 			// Optionally, check metadata format here

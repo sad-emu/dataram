@@ -9,12 +9,6 @@ import (
 	"time"
 )
 
-// Define const header bytes
-const (
-	METADATA_HEADER = 10 // Size of the header for int64 response
-	DATA_HEADER     = 12
-)
-
 // The purpose of RamBundle is to take a collection of/a single RamFile(s)
 // and bundle or split them into set chunks for transportation.
 
@@ -23,10 +17,12 @@ const (
 // 2. A data block that contains the actual data of the files in the bundle
 // Multiple data blocks may result from a single bundle. Only a single metadata map will be created for each bundle.
 
-type RamBundle struct {
-	fileQueue    []RamFile
-	exportBundle []RamFile
-	exportMeta   map[string]map[string]string // Metadata for the export bundle (map of string to map of strings)
+// State will need to be saved and stored for this class for restarts
+
+type RamExportBundle struct {
+	fileInboundQueue []RamFile
+	exportBundle     []RamFile
+	exportMeta       map[string]map[string]string // Metadata for the export bundle (map of string to map of strings)
 	// exportBundleMeta []BundleMeta                 // Metadata of each package
 	exportFinished bool  // Flag to indicate if the export is finished
 	sentMetaData   bool  // Flag to indicate if metadata has been sent
@@ -47,30 +43,30 @@ func popFront(files *[]RamFile) (RamFile, bool) {
 	return first, true
 }
 
-func NewRamBundle(chunkSize int64, maxBundleCount int, maxQueueSize int) *RamBundle {
-	return &RamBundle{
-		fileQueue:      make([]RamFile, 0),
-		exportBundle:   make([]RamFile, 0),
-		chunkSize:      chunkSize,
-		maxBundleCount: maxBundleCount,
-		maxQueueSize:   maxQueueSize,
-		exportFinished: true,
+func NewRamExportBundle(chunkSize int64, maxBundleCount int, maxQueueSize int) *RamExportBundle {
+	return &RamExportBundle{
+		fileInboundQueue: make([]RamFile, 0),
+		exportBundle:     make([]RamFile, 0),
+		chunkSize:        chunkSize,
+		maxBundleCount:   maxBundleCount,
+		maxQueueSize:     maxQueueSize,
+		exportFinished:   true,
 	}
 }
 
-func (rb *RamBundle) AddFile(rf RamFile) error {
+func (rb *RamExportBundle) AddFile(rf RamFile) error {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
-	if len(rb.fileQueue) < rb.maxQueueSize {
-		rb.fileQueue = append(rb.fileQueue, rf)
+	if len(rb.fileInboundQueue) < rb.maxQueueSize {
+		rb.fileInboundQueue = append(rb.fileInboundQueue, rf)
 		return nil
 	} else {
 		return fmt.Errorf("RamBundle queue is full, cannot add more files until some are processed")
 	}
 }
 
-func (rb *RamBundle) GetNextBundle() ([]byte, error) {
+func (rb *RamExportBundle) GetNextExportBundle() ([]byte, error) {
 	// Get and return the next chunk
 	if rb.bundlesSent >= rb.totalBundles {
 		rb.exportFinished = true // All bundles have been sent
@@ -85,8 +81,8 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 		newBundleSize := int64(0)
 		newBundleCount := 0
 		// loop over each file in the queue
-		for i := 0; i < len(rb.fileQueue); i++ {
-			rf, ok := popFront(&rb.fileQueue)
+		for i := 0; i < len(rb.fileInboundQueue); i++ {
+			rf, ok := popFront(&rb.fileInboundQueue)
 			if !ok {
 				break // No more files to process
 			}
@@ -147,6 +143,7 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 
 		// Append MetaData header to the start of the bytes
 		headerBytes := IntToBytes(METADATA_HEADER)
+		headerBytes = append(DATARAM_EXPORT_BUNDLE_HEADER_1, headerBytes...)
 		bytes = append(headerBytes, bytes...)
 
 		return bytes, nil
@@ -154,6 +151,7 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 
 	bytesBundle := make([]byte, 0)
 	headerBytes := IntToBytes(DATA_HEADER)
+	headerBytes = append(DATARAM_EXPORT_BUNDLE_HEADER_1, headerBytes...)
 	bytesBundle = append(headerBytes, bytesBundle...)
 	// Bytes we have sent on the previous bundle
 	bundleTotalPosition := int64(rb.chunkSize) * int64(rb.bundlesSent)
