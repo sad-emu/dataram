@@ -24,18 +24,18 @@ const (
 // Multiple data blocks may result from a single bundle. Only a single metadata map will be created for each bundle.
 
 type RamBundle struct {
-	fileQueue        []RamFile
-	exportBundle     []RamFile
-	exportMeta       map[string]map[string]string // Metadata for the export bundle (map of string to map of strings)
-	exportBundleMeta []BundleMeta                 // Metadata of each package
-	exportFinished   bool                         // Flag to indicate if the export is finished
-	sentMetaData     bool                         // Flag to indicate if metadata has been sent
-	bundlesSent      int64                        // Number of bundles sent
-	totalBundles     int64                        // Total number of bundles to be sent
-	maxQueueSize     int                          // Maximum size of the queue
-	chunkSize        int64
-	maxBundleCount   int
-	mu               sync.Mutex // Mutex to protect concurrent access
+	fileQueue    []RamFile
+	exportBundle []RamFile
+	exportMeta   map[string]map[string]string // Metadata for the export bundle (map of string to map of strings)
+	// exportBundleMeta []BundleMeta                 // Metadata of each package
+	exportFinished bool  // Flag to indicate if the export is finished
+	sentMetaData   bool  // Flag to indicate if metadata has been sent
+	bundlesSent    int64 // Number of bundles sent
+	totalBundles   int64 // Total number of bundles to be sent
+	maxQueueSize   int   // Maximum size of the queue
+	chunkSize      int64
+	maxBundleCount int
+	mu             sync.Mutex // Mutex to protect concurrent access
 }
 
 func popFront(files *[]RamFile) (RamFile, bool) {
@@ -74,7 +74,7 @@ func (rb *RamBundle) GetNextBundle() ([]byte, error) {
 	// Get and return the next chunk
 	if rb.bundlesSent >= rb.totalBundles {
 		rb.exportFinished = true // All bundles have been sent
-		rb.exportBundleMeta = nil
+		// rb.exportBundleMeta = nil
 		rb.exportBundle = rb.exportBundle[:0] // Clear the export bundle
 	}
 
