@@ -50,3 +50,12 @@ func Int64ToBytes(intToConvert int64) []byte {
 	binary.BigEndian.PutUint64(headerBytes, uint64(intToConvert))
 	return headerBytes
 }
+
+func PopFront(files *[]RamFile) (RamFile, bool) {
+	if len(*files) == 0 {
+		return RamFile{}, false
+	}
+	first := (*files)[0]
+	*files = (*files)[1:]
+	return first, true
+}

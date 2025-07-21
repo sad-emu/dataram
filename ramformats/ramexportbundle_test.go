@@ -48,7 +48,7 @@ func TestRamBundle_GetNextBundleLite(t *testing.T) {
 		if rf == nil {
 			t.Fatalf("Failed to create RamFile for %s", files[i])
 		}
-		if err := rb.AddFile(*rf); err != nil {
+		if err := rb.PushFile(*rf); err != nil {
 			t.Fatalf("Failed to add file to bundle: %v", err)
 		}
 	}
@@ -134,7 +134,7 @@ func TestRamBundle_GetNextBundleBigLite(t *testing.T) {
 		if rf == nil {
 			t.Fatalf("Failed to create RamFile for %s", files[i])
 		}
-		if err := rb.AddFile(*rf); err != nil {
+		if err := rb.PushFile(*rf); err != nil {
 			t.Fatalf("Failed to add file to bundle: %v", err)
 		}
 	}

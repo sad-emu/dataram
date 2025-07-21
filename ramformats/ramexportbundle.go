@@ -34,15 +34,6 @@ type RamExportBundle struct {
 	mu             sync.Mutex // Mutex to protect concurrent access
 }
 
-func popFront(files *[]RamFile) (RamFile, bool) {
-	if len(*files) == 0 {
-		return RamFile{}, false
-	}
-	first := (*files)[0]
-	*files = (*files)[1:]
-	return first, true
-}
-
 func NewRamExportBundle(chunkSize int64, maxBundleCount int, maxQueueSize int) *RamExportBundle {
 	return &RamExportBundle{
 		fileInboundQueue: make([]RamFile, 0),
@@ -54,7 +45,7 @@ func NewRamExportBundle(chunkSize int64, maxBundleCount int, maxQueueSize int) *
 	}
 }
 
-func (rb *RamExportBundle) AddFile(rf RamFile) error {
+func (rb *RamExportBundle) PushFile(rf RamFile) error {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
@@ -82,7 +73,7 @@ func (rb *RamExportBundle) GetNextExportBundle() ([]byte, error) {
 		newBundleCount := 0
 		// loop over each file in the queue
 		for i := 0; i < len(rb.fileInboundQueue); i++ {
-			rf, ok := popFront(&rb.fileInboundQueue)
+			rf, ok := PopFront(&rb.fileInboundQueue)
 			if !ok {
 				break // No more files to process
 			}

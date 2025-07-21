@@ -27,3 +27,44 @@ type RamImportBundle struct {
 	maxBundleCount int
 	mu             sync.Mutex // Mutex to protect concurrent access
 }
+
+func NewRamImportBundle(chunkSize int64, maxBundleCount int, maxQueueSize int, processingDir string) *RamImportBundle {
+	return &RamImportBundle{
+		processBundles:      make([]RamFile, 0),
+		completedFiles:      make([]RamFile, 0),
+		filePartsQueue:      make([]byte, 0),
+		chunkSize:           chunkSize,
+		maxBundleCount:      maxBundleCount,
+		maxQueueSize:        maxQueueSize,
+		processingDirectory: processingDir,
+	}
+}
+
+func (rb *RamImportBundle) PopFile(rf RamFile) *RamFile {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if len(rb.completedFiles) != 0 {
+		rf, _ := PopFront(&rb.completedFiles)
+		return &rf
+	} else {
+		return nil
+	}
+}
+
+func (rb *RamImportBundle) ProcessNextExportBundle(dataIn []byte) error {
+
+	// Verify data has a valid header
+
+	// if it's a metadata bundle
+	// create RamFiles and add into process bundles
+	// Check to see if they exist first with uuid checks, if they exist just update metadata
+
+	// if it's a data bundle
+	// Create ramfiles and add into process bundles
+	// Check to see if they exist first with uuid checks
+	// Write the data as specified in the data metadata bundle
+
+	// If files are completed move them to the completedfiles list
+
+}
