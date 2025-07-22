@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -51,6 +52,10 @@ func Int64ToBytes(intToConvert int64) []byte {
 	return headerBytes
 }
 
+func BytesToInt64(data []byte) int64 {
+	return int64(binary.BigEndian.Uint64(data))
+}
+
 func PopFront(files *[]RamFile) (RamFile, bool) {
 	if len(*files) == 0 {
 		return RamFile{}, false
@@ -58,4 +63,31 @@ func PopFront(files *[]RamFile) (RamFile, bool) {
 	first := (*files)[0]
 	*files = (*files)[1:]
 	return first, true
+}
+
+func PrepareFile(path string, size int64) (*os.File, error) {
+	// Open the file with read-write, create if not exists
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+
+	// Get current file info
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	// Resize the file if it's smaller than desired
+	if info.Size() < size {
+		err = file.Truncate(size)
+		if err != nil {
+			file.Close()
+			return nil, fmt.Errorf("failed to resize file: %w", err)
+		}
+	}
+
+	// Now file is ready for seeking and writing
+	return file, nil
 }

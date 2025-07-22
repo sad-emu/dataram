@@ -56,3 +56,13 @@ func NewRamFileFromMeta(metaData map[string]string) *RamFile {
 	}
 	return rf
 }
+
+func NewRamFileFromUUID(UUID string) *RamFile {
+	rf := &RamFile{
+		LocalPath:   "",
+		RamFileType: DROutputFile,
+		MetaData:    make(map[string]string),
+		UUID:        UUID,
+	}
+	return rf
+}

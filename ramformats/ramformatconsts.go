@@ -10,4 +10,7 @@ var (
 const (
 	METADATA_HEADER = 10
 	DATA_HEADER     = 12
+	UUID_LEN        = 36
+	INT64_LEN       = 8
+	INT32_LEN       = 4
 )

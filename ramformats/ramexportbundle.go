@@ -194,9 +194,14 @@ func (rb *RamExportBundle) GetNextExportBundle() ([]byte, error) {
 		// append bytesBundle to bundleChunk\
 		// TODO format (UUID, start_pos, len, Datablob)
 		uuidBytes := []byte(rf.UUID)
+		if len(uuidBytes) != UUID_LEN {
+			return nil, fmt.Errorf("Invalid UUID length: %d", len(uuidBytes))
+		}
+		totalFileSize := Int64ToBytes(sizeVal)
 		startPos := Int64ToBytes(currentFilePosition)
 		len := IntToBytes(n)
 		bytesBundle = append(bytesBundle, uuidBytes...)
+		bytesBundle = append(bytesBundle, totalFileSize...)
 		bytesBundle = append(bytesBundle, startPos...)
 		bytesBundle = append(bytesBundle, len...)
 		bytesBundle = append(bytesBundle, bundleChunk...)
