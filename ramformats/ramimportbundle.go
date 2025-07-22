@@ -1,6 +1,8 @@
 package ramformats
 
 import (
+	"bytes"
+	"fmt"
 	"sync"
 )
 
@@ -19,7 +21,7 @@ import (
 type RamImportBundle struct {
 	processingDirectory string
 	filePartsQueue      []byte
-	processBundles      []RamFile
+	processBundles      map[string]RamFile
 	completedFiles      []RamFile
 
 	maxQueueSize   int // Maximum size of the queue
@@ -30,7 +32,7 @@ type RamImportBundle struct {
 
 func NewRamImportBundle(chunkSize int64, maxBundleCount int, maxQueueSize int, processingDir string) *RamImportBundle {
 	return &RamImportBundle{
-		processBundles:      make([]RamFile, 0),
+		processBundles:      make(map[string]RamFile),
 		completedFiles:      make([]RamFile, 0),
 		filePartsQueue:      make([]byte, 0),
 		chunkSize:           chunkSize,
@@ -53,18 +55,50 @@ func (rb *RamImportBundle) PopFile(rf RamFile) *RamFile {
 }
 
 func (rb *RamImportBundle) ProcessNextExportBundle(dataIn []byte) error {
-
 	// Verify data has a valid header
+	blockHeader := dataIn[0:4]
+	if !bytes.Equal(blockHeader, DATARAM_EXPORT_BUNDLE_HEADER_1) {
+		return fmt.Errorf("Error parsing data. Unrecognised block header: %d", blockHeader)
+	}
 
-	// if it's a metadata bundle
-	// create RamFiles and add into process bundles
-	// Check to see if they exist first with uuid checks, if they exist just update metadata
+	typeHeader := BytesToInt(dataIn[4:8])
+	if typeHeader == METADATA_HEADER {
+		// if it's a metadata bundle
+		metadataHeader, err := BytesToExportMeta(dataIn[8:])
+		if err != nil {
+			return fmt.Errorf("Error parsing ram export meta map, %s", err)
+		}
 
-	// if it's a data bundle
-	// Create ramfiles and add into process bundles
-	// Check to see if they exist first with uuid checks
-	// Write the data as specified in the data metadata bundle
+		for k, v := range metadataHeader {
+			fmt.Printf("key[%s] value[%s]\n", k, v)
+			_, exists := rb.processBundles[k]
+			if !exists {
+				ramFile := *NewRamFileFromMeta(v)
+				// TODO this
+				ramFile.LocalPath = "/tmp/" + k
+				rb.processBundles[k] = ramFile
+			} else {
+				// Already exists from a data packet first, just update metadata
+				for kk, vv := range v {
+					rb.processBundles[k].MetaData[kk] = vv
+				}
+			}
 
-	// If files are completed move them to the completedfiles list
+		}
+		// create RamFiles and add into process bundles
+		// Check to see if they exist first with uuid checks, if they exist just update metadata
 
+	} else if typeHeader == DATA_HEADER {
+		// First get the uuid
+		// check to see if exists
+		// Create RamFile if not with uuid, tmp path = ramFile.LocalPath = "/tmp/" + uuid
+		// read data start point
+		// read data length
+		// open file on disk, create if doesnt exist
+		// write from start point for length
+		return nil
+	} else {
+		return fmt.Errorf("Error parsing data. Unrecognised type header: %d", typeHeader)
+	}
+	return fmt.Errorf("Unreachable code reached.")
 }
