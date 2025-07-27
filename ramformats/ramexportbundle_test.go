@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// TODO this
-
 func createTestFile(filename string, size int) ([]byte, error) {
 	data := make([]byte, size)
 	_, err := rand.Read(data)

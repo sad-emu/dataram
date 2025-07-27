@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Define const header bytes
+// Define const header bytes // TODO test this
 
 // The purpose of RamBundle is to take chunks of ramexportbundles
 // and piece them back into ramfiles
@@ -24,19 +24,15 @@ type RamImportBundle struct {
 	processBundles      map[string]RamFile
 	completedFiles      []RamFile
 
-	maxQueueSize   int // Maximum size of the queue
-	chunkSize      int64
-	maxBundleCount int
-	mu             sync.Mutex // Mutex to protect concurrent access
+	maxQueueSize int        // Maximum size of the queue
+	mu           sync.Mutex // Mutex to protect concurrent access
 }
 
-func NewRamImportBundle(chunkSize int64, maxBundleCount int, maxQueueSize int, processingDir string) *RamImportBundle {
+func NewRamImportBundle(maxQueueSize int, processingDir string) *RamImportBundle {
 	return &RamImportBundle{
 		processBundles:      make(map[string]RamFile),
 		completedFiles:      make([]RamFile, 0),
 		filePartsQueue:      make([]byte, 0),
-		chunkSize:           chunkSize,
-		maxBundleCount:      maxBundleCount,
 		maxQueueSize:        maxQueueSize,
 		processingDirectory: processingDir,
 	}
@@ -93,6 +89,9 @@ func (rb *RamImportBundle) ProcessNextExportBundle(dataIn []byte) error {
 	} else if typeHeader == DATA_HEADER {
 
 		for {
+			if readPos+UUID_LEN > len(dataIn) {
+				return fmt.Errorf("Error parsing data. Not enough data for UUID")
+			}
 			uuid := string(dataIn[readPos : readPos+UUID_LEN])
 			readPos += UUID_LEN
 			ramFile, exists := rb.processBundles[uuid]
