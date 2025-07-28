@@ -62,6 +62,9 @@ func (rb *RamExportBundle) GetNextExportBundle() ([]byte, error) {
 	if rb.bundlesSent >= rb.totalBundles {
 		rb.exportFinished = true // All bundles have been sent
 		// rb.exportBundleMeta = nil
+		rb.totalBundles = 0
+		rb.bundlesSent = 0
+		rb.exportMeta = nil
 		rb.exportBundle = rb.exportBundle[:0] // Clear the export bundle
 	}
 

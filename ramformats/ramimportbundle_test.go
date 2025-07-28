@@ -68,21 +68,35 @@ func TestRamImportBundle_RoundTrip(t *testing.T) {
 	// }
 
 	// Verify reconstructed files
-	for i := 0; i < fileCount; i++ {
-		importedFile := "test_data/imported/" + files[i]
-		importedData, err := os.ReadFile(importedFile)
-		if err != nil {
-			t.Fatalf("Failed to read imported file: %v", err)
+	filesChecked := 0
+
+	for {
+		importedFile := imp.PopFile()
+		if importedFile == nil {
+			if filesChecked < fileCount {
+				t.Errorf("Not all files were processed, expected %d, got %d", fileCount, filesChecked)
+			}
+			break // No more files to process
+		} else {
+			filesChecked++
+		}
+		importedData, err1 := os.ReadFile(importedFile.LocalPath)
+		originalData, err2 := os.ReadFile(importedFile.MetaData[DRFileNameKey])
+		if err1 != nil {
+			t.Fatalf("Failed to read imported file: %v", err1)
+		}
+		if err2 != nil {
+			t.Fatalf("Failed to read original file: %v", err2)
 		}
 		if len(importedData) != fileSize {
 			t.Errorf("Imported file size mismatch: got %d, want %d", len(importedData), fileSize)
 		}
 		for j := range importedData {
-			if importedData[j] != fileData[i][j] {
+			if importedData[j] != originalData[j] {
 				t.Errorf("Data mismatch in file %s at byte %d", importedFile, j)
 				break
 			}
 		}
-		os.Remove(importedFile)
+		os.Remove(importedFile.LocalPath)
 	}
 }

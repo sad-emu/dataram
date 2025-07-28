@@ -3,6 +3,7 @@ package ramformats
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -22,28 +23,31 @@ type RamImportBundle struct {
 	processingDirectory string
 	filePartsQueue      []byte
 	processBundles      map[string]RamFile
-	completedFiles      []RamFile
-
-	maxQueueSize int        // Maximum size of the queue
-	mu           sync.Mutex // Mutex to protect concurrent access
+	CompletedFiles      []RamFile
+	bytesWritten        map[string]int64 // Track bytes written to each file
+	metadataApplied     map[string]bool  // Track bytes written to each file
+	maxQueueSize        int              // Maximum size of the queue
+	mu                  sync.Mutex       // Mutex to protect concurrent access
 }
 
 func NewRamImportBundle(maxQueueSize int, processingDir string) *RamImportBundle {
 	return &RamImportBundle{
 		processBundles:      make(map[string]RamFile),
-		completedFiles:      make([]RamFile, 0),
+		bytesWritten:        make(map[string]int64),
+		metadataApplied:     make(map[string]bool),
+		CompletedFiles:      make([]RamFile, 0),
 		filePartsQueue:      make([]byte, 0),
 		maxQueueSize:        maxQueueSize,
 		processingDirectory: processingDir,
 	}
 }
 
-func (rb *RamImportBundle) PopFile(rf RamFile) *RamFile {
+func (rb *RamImportBundle) PopFile() *RamFile {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
-	if len(rb.completedFiles) != 0 {
-		rf, _ := PopFront(&rb.completedFiles)
+	if len(rb.CompletedFiles) != 0 {
+		rf, _ := PopFront(&rb.CompletedFiles)
 		return &rf
 	} else {
 		return nil
@@ -69,16 +73,26 @@ func (rb *RamImportBundle) ProcessNextExportBundle(dataIn []byte) error {
 		for k, v := range metadataHeader {
 			fmt.Printf("key[%s] value[%s]\n", k, v)
 			_, exists := rb.processBundles[k]
+			rb.metadataApplied[k] = true
 			if !exists {
 				ramFile := *NewRamFileFromMeta(v)
 				// TODO this
-				ramFile.LocalPath = "/tmp/" + k
+				ramFile.LocalPath = rb.processingDirectory + "/" + k
 				rb.processBundles[k] = ramFile
 			} else {
 				// Already exists from a data packet first, just update metadata
 				for kk, vv := range v {
 					rb.processBundles[k].MetaData[kk] = vv
 				}
+			}
+			fileSize, err := strconv.ParseInt(v[DRFileSizeKey], 10, 64)
+			if err != nil {
+				return fmt.Errorf("Error parsing file size for %s: %v", k, err)
+			}
+			if rb.bytesWritten[k] >= fileSize && rb.metadataApplied[k] {
+				// File is complete, add to completed files
+				rb.CompletedFiles = append(rb.CompletedFiles, rb.processBundles[k])
+				delete(rb.processBundles, k) // Remove from process bundles
 			}
 
 		}
@@ -88,6 +102,8 @@ func (rb *RamImportBundle) ProcessNextExportBundle(dataIn []byte) error {
 
 	} else if typeHeader == DATA_HEADER {
 
+		// Need to track number of bytes written to each file
+		// When bytes written to a file is equal to the file size, then the file is complete
 		for {
 			if readPos+UUID_LEN > len(dataIn) {
 				return fmt.Errorf("Error parsing data. Not enough data for UUID")
@@ -123,6 +139,13 @@ func (rb *RamImportBundle) ProcessNextExportBundle(dataIn []byte) error {
 			_, writeErr := tmpFile.Write(dataIn[readPos : readPos+bytesLen])
 			if writeErr != nil {
 				return writeErr
+			}
+			rb.bytesWritten[uuid] += int64(bytesLen)
+
+			if rb.bytesWritten[uuid] >= fileSize && rb.metadataApplied[uuid] {
+				// File is complete, add to completed files
+				rb.CompletedFiles = append(rb.CompletedFiles, ramFile)
+				delete(rb.processBundles, uuid) // Remove from process bundles
 			}
 
 			readPos += bytesLen
