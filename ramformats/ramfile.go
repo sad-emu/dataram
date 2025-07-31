@@ -26,6 +26,9 @@ type RamFile struct {
 	RamFileType string
 	MetaData    map[string]string
 	UUID        string
+	// These are used for pickup
+	Length   int64
+	Position int64
 }
 
 func NewRamFileFromLocal(localPath string, fileName string) *RamFile {
